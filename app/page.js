@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiSearch, FiRefreshCw, FiFilter, FiCalendar, FiInfo, FiBriefcase, FiDownload } from 'react-icons/fi';
+import { FiSearch, FiRefreshCw, FiFilter, FiCalendar, FiInfo, FiBriefcase } from 'react-icons/fi';
 
 export default function Home() {
   const [projects, setProjects] = useState([]);
@@ -72,18 +72,44 @@ export default function Home() {
   
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects');
+      const response = await fetch('https://meresu-jsw-backend.onrender.com/api/projects', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://jsw-scrapped-data-frontend.vercel.app'
+        },
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
       const data = await response.json();
       setProjects(data);
       setFilteredProjects(data);
     } catch (error) {
       console.error('Error fetching projects:', error);
+      // Show a user-friendly error message
+      alert('Failed to load projects. Please try again later.');
     }
   };
   
   const checkPipelineStatus = async () => {
     try {
-      const response = await fetch('/api/pipeline_status');
+      const response = await fetch('https://meresu-jsw-backend.onrender.com/api/pipeline_status', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://jsw-scrapped-data-frontend.vercel.app'
+        },
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
       const data = await response.json();
       setIsPipelineRunning(data.running);
       
@@ -98,9 +124,19 @@ export default function Home() {
   const runPipeline = async () => {
     try {
       setIsPipelineRunning(true);
-      const response = await fetch('/api/run_pipeline', {
-        method: 'POST'
+      const response = await fetch('https://meresu-jsw-backend.onrender.com/api/run_pipeline', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://jsw-scrapped-data-frontend.vercel.app'
+        },
+        credentials: 'omit'
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
       const data = await response.json();
       
       if (data.status !== 'success') {
@@ -200,62 +236,6 @@ export default function Home() {
   const pageCount = Math.ceil(filteredProjects.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const paginatedProjects = filteredProjects.slice(startIndex, startIndex + rowsPerPage);
-  
-  // CSV Export functionality
-  const downloadCSV = () => {
-    // Define headers based on project data structure
-    const headers = [
-      'Title', 
-      'Project Type', 
-      'Date Published', 
-      'Company', 
-      'Location', 
-      'Target Company', 
-      'Contract Value', 
-      'Potential Value', 
-      'Steel Requirements', 
-      'Urgency', 
-      'Reasoning'
-    ];
-    
-    // Convert projects to CSV format
-    const csvRows = [];
-    
-    // Add headers
-    csvRows.push(headers.join(','));
-    
-    // Add data rows
-    filteredProjects.forEach(project => {
-      const row = [
-        `"${(project.Title || '').replace(/"/g, '""')}"`,
-        `"${(project['Project Type'] || '').replace(/"/g, '""')}"`,
-        `"${(project['Date Published'] || '').replace(/"/g, '""')}"`,
-        `"${(project.Company || '').replace(/"/g, '""')}"`,
-        `"${(project.Location || '').replace(/"/g, '""')}"`,
-        `"${(project['Target Company'] || '').replace(/"/g, '""')}"`,
-        `"${(project['Contract Value'] || '').replace(/"/g, '""')}"`,
-        `"${(project['Potential Value'] || '').replace(/"/g, '""')}"`,
-        `"${(project['Steel Requirements'] || '').replace(/"/g, '""')}"`,
-        `"${(project.Urgency || '').replace(/"/g, '""')}"`,
-        `"${(project.Reasoning || '').replace(/"/g, '""')}"`
-      ];
-      csvRows.push(row.join(','));
-    });
-    
-    // Create CSV content
-    const csvContent = csvRows.join('\n');
-    
-    // Create a blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'jsw_projects.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -386,23 +366,14 @@ export default function Home() {
             <div className="text-sm text-gray-600">
               Showing {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredProjects.length)} of {filteredProjects.length} projects
             </div>
-            <div className="flex space-x-2">
-              <button 
-                onClick={downloadCSV}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                <FiDownload className="mr-2" />
-                Export CSV
-              </button>
-              <button 
-                onClick={runPipeline}
-                disabled={isPipelineRunning}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-xs font-medium bg-gray-800 hover:bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <FiRefreshCw className={`mr-2 ${isPipelineRunning ? 'animate-spin' : ''}`} />
-                {isPipelineRunning ? 'Running...' : 'Run Pipeline'}
-              </button>
-            </div>
+            <button 
+              onClick={runPipeline}
+              disabled={isPipelineRunning}
+              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-xs font-medium bg-gray-800 hover:bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FiRefreshCw className={`mr-2 ${isPipelineRunning ? 'animate-spin' : ''}`} />
+              {isPipelineRunning ? 'Running...' : 'Run Pipeline'}
+            </button>
           </div>
         )}
         
