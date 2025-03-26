@@ -83,7 +83,18 @@ export default function Home() {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
       
-      const data = await response.json();
+      // Get the response text first
+      const text = await response.text();
+      
+      // Handle special JSON values like NaN
+      const sanitizedText = text
+        .replace(/:\s*NaN\s*([,}])/g, ': null$1')  // Replace NaN with null
+        .replace(/:\s*Infinity\s*([,}])/g, ': null$1')  // Replace Infinity with null
+        .replace(/:\s*-Infinity\s*([,}])/g, ': null$1');  // Replace -Infinity with null
+      
+      // Parse the sanitized JSON
+      const data = JSON.parse(sanitizedText);
+      
       setProjects(data);
       setFilteredProjects(data);
     } catch (error) {
