@@ -75,10 +75,8 @@ export default function Home() {
       const response = await fetch('https://meresu-jsw-backend.onrender.com/api/projects', {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Origin': 'https://jsw-scrapped-data-frontend.vercel.app'
-        },
-        credentials: 'omit'
+          'Content-Type': 'application/json'
+        }
       });
       
       if (!response.ok) {
@@ -100,10 +98,8 @@ export default function Home() {
       const response = await fetch('https://meresu-jsw-backend.onrender.com/api/pipeline_status', {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Origin': 'https://jsw-scrapped-data-frontend.vercel.app'
-        },
-        credentials: 'omit'
+          'Content-Type': 'application/json'
+        }
       });
       
       if (!response.ok) {
@@ -127,10 +123,8 @@ export default function Home() {
       const response = await fetch('https://meresu-jsw-backend.onrender.com/api/run_pipeline', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Origin': 'https://jsw-scrapped-data-frontend.vercel.app'
-        },
-        credentials: 'omit'
+          'Content-Type': 'application/json'
+        }
       });
       
       if (!response.ok) {

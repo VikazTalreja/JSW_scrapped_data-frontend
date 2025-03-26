@@ -8,23 +8,17 @@ const CSV_FILE = path.join(process.cwd(), '..', 'qualified_news.csv');
 
 export async function GET() {
   try {
-    // Check if file exists
-    if (!fs.existsSync(CSV_FILE)) {
-      return NextResponse.json([], { status: 200 });
-    }
-    
-    // Read the CSV file
-    const fileContent = fs.readFileSync(CSV_FILE, 'utf8');
-    
-    // Parse CSV to JSON
-    const records = parse(fileContent, {
-      columns: true,
-      skip_empty_lines: true
+    const response = await fetch('https://meresu-jsw-backend.onrender.com/api/projects', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
-    
-    return NextResponse.json(records, { status: 200 });
+
+    const data = await response.json();
+    return Response.json(data);
   } catch (error) {
-    console.error('Error loading projects from CSV:', error);
-    return NextResponse.json({ error: 'Failed to load projects' }, { status: 500 });
+    console.error('Error fetching projects:', error);
+    return Response.json({ error: 'Failed to fetch projects' }, { status: 500 });
   }
 } 
