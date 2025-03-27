@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { FiSearch, FiRefreshCw, FiFilter, FiCalendar, FiInfo, FiBriefcase } from 'react-icons/fi';
+import React from 'react';
 
 export default function Home() {
   const [projects, setProjects] = useState([]);
@@ -13,6 +14,7 @@ export default function Home() {
   const [sortBy, setSortBy] = useState('');
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [availableProjectTypes, setAvailableProjectTypes] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const rowsPerPage = 10;
   
   // CSS for read more/less expanded state
@@ -47,6 +49,34 @@ export default function Home() {
       max-height: 500px;
       opacity: 1;
     }
+    
+    /* Responsive styles */
+    @media (max-width: 768px) {
+      .mobile-truncate {
+        max-width: 150px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      .mobile-wrap {
+        white-space: normal !important;
+        word-break: break-word;
+      }
+      
+      .mobile-hide {
+        display: none;
+      }
+    }
+    
+    @media (max-width: 640px) {
+      .sm-truncate {
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
   `;
   
   useEffect(() => {
@@ -71,6 +101,7 @@ export default function Home() {
   }, [projects]);
   
   const fetchProjects = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('https://meresu-jsw-backend.onrender.com/api/projects', {
         method: 'GET',
@@ -101,6 +132,8 @@ export default function Home() {
       console.error('Error fetching projects:', error);
       // Show a user-friendly error message
       alert('Failed to load projects. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -252,12 +285,12 @@ export default function Home() {
         </div>
       </nav>
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         {/* No Projects Card */}
         {filteredProjects.length === 0 && (
           <div className="text-center mb-6" id="pipelineContainer">
-            <div className="bg-white rounded-lg shadow-md overflow-hidden p-8">
-              <div className="p-5 text-center">
+            <div className="bg-white rounded-lg shadow-md overflow-hidden p-4 sm:p-8">
+              <div className="p-2 sm:p-5 text-center">
                 <h5 className="text-xl text-gray-800 font-semibold mb-4">No Qualified Projects Found</h5>
                 <button 
                   id="runPipelineBtn"
@@ -282,9 +315,9 @@ export default function Home() {
         
         {/* Search and Filter Section */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-          <div className="p-5 text-gray-800">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-              <div className="md:col-span-4">
+          <div className="p-3 sm:p-5 text-gray-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4">
+              <div className="lg:col-span-4 sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
                 <div className="flex items-center">
                   <span className="inline-flex items-center px-3 py-2 border border-r-0 border-gray-300 bg-gray-100 text-gray-700 rounded-l-md">
@@ -301,7 +334,7 @@ export default function Home() {
                 </div>
               </div>
               
-              <div className="md:col-span-2">
+              <div className="lg:col-span-2 sm:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                 <div className="relative">
                   <select 
@@ -321,7 +354,7 @@ export default function Home() {
                 </div>
               </div>
               
-              <div className="md:col-span-3">
+              <div className="lg:col-span-3 sm:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
                 <div className="relative">
                   <select 
@@ -342,7 +375,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="md:col-span-3">
+              <div className="lg:col-span-3 sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
                 <div className="relative">
                   <select 
@@ -367,8 +400,8 @@ export default function Home() {
         </div>
         
         {filteredProjects.length > 0 && (
-          <div className="flex justify-between items-center mb-4">
-            <div className="text-sm text-gray-600">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+            <div className="text-sm text-gray-600 mb-2 sm:mb-0">
               Showing {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredProjects.length)} of {filteredProjects.length} projects
             </div>
             <button 
@@ -383,9 +416,18 @@ export default function Home() {
         )}
         
         <div className="overflow-x-auto">
+          {/* Loading State */}
+          {isLoading && (
+            <div className="text-center py-12 bg-white rounded-lg shadow-md">
+              <div className="inline-block w-8 h-8 border-4 rounded-full animate-spin mr-2 border-t-transparent border-gray-600"></div>
+              <h3 className="text-gray-700 text-xl font-medium mt-4">Loading Projects...</h3>
+              <p className="text-gray-500 mt-2">Please wait while we fetch the latest data.</p>
+            </div>
+          )}
+          
           {/* No Projects Message */}
-          {filteredProjects.length === 0 && (
-            <div id="noProjectsMessage" className="text-center py-12 bg-white rounded-lg shadow-md">
+          {!isLoading && filteredProjects.length === 0 && (
+            <div id="noProjectsMessage" className="text-center py-8 sm:py-12 bg-white rounded-lg shadow-md">
               <FiInfo className="mx-auto text-gray-400 text-5xl mb-3" />
               <h3 className="text-gray-700 text-xl font-medium">No Qualified Projects Found</h3>
               <p className="text-gray-500 mt-2">Run the pipeline to find new qualified projects.</p>
@@ -393,33 +435,32 @@ export default function Home() {
           )}
           
           {/* Projects Table */}
-          {filteredProjects.length > 0 && (
+          {!isLoading && filteredProjects.length > 0 && (
             <>
               <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200" id="projectsTable">
                     <thead className="bg-gray-100">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider text-center">#</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Project Details</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Business Information</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Value Assessment</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider w-32">Analysis</th>
+                        <th className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider text-center">#</th>
+                        <th className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Project Details</th>
+                        <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Business Info</th>
+                        <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Value</th>
+                        <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider w-20 sm:w-32">Analysis</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200" id="projectsTableBody">
                       {paginatedProjects.map((project, index) => (
-                        <>
+                        <React.Fragment key={`project-${index}`}>
                           <tr 
-                            key={index} 
                             id={`project-row-${index}`}
                             className="hover:bg-gray-50 transition-colors duration-150 expandable-row"
                             onClick={() => toggleRow(index)}
                           >
-                            <td className="px-0 py-4 text-sm text-center font-medium">{startIndex + index + 1}</td>
-                            <td className="px-6 py-4 text-sm">
-                              <div className="space-y-1 max-w-xs">
-                                <div className="text-sm font-medium text-gray-900 break-words">{project.Title || ''}</div>
+                            <td className="px-2 sm:px-4 py-3 text-sm text-center font-medium">{startIndex + index + 1}</td>
+                            <td className="px-2 sm:px-6 py-3 text-sm">
+                              <div className="space-y-1 max-w-[120px] sm:max-w-xs">
+                                <div className="text-sm font-medium text-gray-900 break-words sm-truncate mobile-wrap">{project.Title || ''}</div>
                                 {project["Project Type"] && (
                                   <div className="flex items-center mt-1">
                                     <FiBriefcase className="text-gray-500 mr-1 flex-shrink-0" size={14} />
@@ -429,33 +470,33 @@ export default function Home() {
                                 <div className="text-xs text-gray-400">{project["Date Published"] || ''}</div>
                               </div>
                             </td>
-                            <td className="px-3 py-4 text-sm">
-                              <div className="space-y-1 max-w-xs">
-                                <div className="text-sm font-medium text-gray-800">{project.Company || ''}</div>
-                                <div className="text-sm text-gray-500 ">{project.Location || ''}</div>
+                            <td className="px-2 sm:px-3 py-3 text-sm">
+                              <div className="space-y-1 max-w-[100px] sm:max-w-xs">
+                                <div className="text-sm font-medium text-gray-800 sm-truncate">{project.Company || ''}</div>
+                                <div className="text-sm text-gray-500 sm-truncate">{project.Location || ''}</div>
                                 {project["Target Company"] && (
-                                  <div className="text-sm text-gray-500">
+                                  <div className="text-sm text-gray-500 mobile-hide">
                                     <span className="font-medium">Target:</span> {project["Target Company"]}
                                   </div>
                                 )}
                               </div>
                             </td>
-                            <td className="px-1 py-4 text-sm">
-                              <div className="space-y-1 max-w-xs">
+                            <td className="px-1 sm:px-2 py-3 text-sm">
+                              <div className="space-y-1 max-w-[90px] sm:max-w-xs">
                                 {project["Contract Value"] && (
                                   <div className="text-sm font-medium flex items-start">
-                                    <span className="text-gray-600 whitespace-nowrap">Contract:</span> 
-                                    <span className="text-gray-800 ml-1 ">{project["Contract Value"]}</span>
+                                    <span className="text-gray-600 whitespace-nowrap mobile-hide">Contract:</span> 
+                                    <span className="text-gray-800 ml-1 mobile-wrap">{project["Contract Value"]}</span>
                                   </div>
                                 )}
                                 {project["Potential Value"] && (
                                   <div className="text-sm flex items-start">
-                                    <span className="text-gray-600 whitespace-nowrap">Potential:</span>
-                                    <span className="text-gray-800 ml-1 ">{project["Potential Value"]}</span>
+                                    <span className="text-gray-600 whitespace-nowrap mobile-hide">Potential:</span>
+                                    <span className="text-gray-800 ml-1 mobile-wrap">{project["Potential Value"]}</span>
                                   </div>
                                 )}
                                 {project["Steel Requirements"] && (
-                                  <div className="text-sm text-gray-500">
+                                  <div className="text-sm text-gray-500 mobile-hide">
                                     <div className="flex flex-col">
                                       <span className="block truncate" title={project["Steel Requirements"]}>
                                         {project["Steel Requirements"].substring(0, 40)}{project["Steel Requirements"].length > 40 ? '...' : ''}
@@ -474,8 +515,8 @@ export default function Home() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-4 text-sm">
-                              <div className="space-y-1 max-w-[120px]">
+                            <td className="px-2 sm:px-4 py-3 text-sm">
+                              <div className="space-y-1 max-w-[80px] sm:max-w-[120px]">
                                 <span className={`inline-block px-2 py-1 rounded-lg text-xs font-medium mb-2 ${
                                   project.Urgency?.toLowerCase() === 'high' ? 'bg-red-100 text-red-800' :
                                   project.Urgency?.toLowerCase() === 'medium' ? 'bg-yellow-100 text-yellow-800' :
@@ -484,7 +525,7 @@ export default function Home() {
                                   {project.Urgency || 'Low'}
                                 </span>
                                 {project.Reasoning && (
-                                  <div className="text-xs text-gray-500">
+                                  <div className="text-xs text-gray-500 mobile-hide">
                                     <div className="flex flex-col">
                                       <span className="block truncate overflow-hidden">
                                         {project.Reasoning.substring(0, 40)}{project.Reasoning.length > 40 ? '...' : ''}
@@ -504,14 +545,14 @@ export default function Home() {
                               </div>
                             </td>
                           </tr>
-                          <tr>
+                          <tr key={`expanded-${index}`}>
                             <td colSpan="5" className="p-0 border-0">
                               <div id={`expanded-row-${index}`} className="expanded-content">
-                                <div className="p-6 pb-8 border-t border-gray-100 bg-gray-50">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="p-3 sm:p-6 pb-4 sm:pb-8 border-t border-gray-100 bg-gray-50">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                                     {/* Steel Requirements */}
                                     {project["Steel Requirements"] && (
-                                      <div className="bg-white p-4 rounded-lg shadow-sm">
+                                      <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm">
                                         <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                                           <FiBriefcase className="mr-2 text-gray-500" size={16} />
                                           Steel Requirements
@@ -524,7 +565,7 @@ export default function Home() {
                                     
                                     {/* Analysis/Reasoning */}
                                     {project.Reasoning && (
-                                      <div className="bg-white p-4 rounded-lg shadow-sm">
+                                      <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm">
                                         <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                                           <FiInfo className="mr-2 text-gray-500" size={16} />
                                           Project Analysis
@@ -539,7 +580,7 @@ export default function Home() {
                               </div>
                             </td>
                           </tr>
-                        </>
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -548,25 +589,25 @@ export default function Home() {
               
               {/* Pagination */}
               {pageCount > 1 && (
-                <nav aria-label="Page navigation" className="mt-6 mb-8">
-                  <ul className="flex items-center justify-center space-x-1" id="pagination">
-                    <li className="inline-block">
+                <nav aria-label="Page navigation" className="mt-4 sm:mt-6 mb-6 sm:mb-8">
+                  <ul className="flex flex-wrap items-center justify-center space-x-0 sm:space-x-1" id="pagination">
+                    <li className="inline-block m-1 sm:m-0">
                       <a 
-                        className={`px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed hover:bg-gray-100' : ''}`}
+                        className={`px-2 sm:px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed hover:bg-gray-100' : ''}`}
                         href="#" 
                         onClick={(e) => {
                           e.preventDefault();
                           if (currentPage > 1) setCurrentPage(currentPage - 1);
                         }}
                       >
-                        Previous
+                        Prev
                       </a>
                     </li>
                     
                     {[...Array(pageCount)].map((_, i) => (
-                      <li key={i} className="inline-block">
+                      <li key={i} className="inline-block m-1 sm:m-0">
                         <a 
-                          className={`px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-200 ${
+                          className={`px-3 sm:px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-200 ${
                             currentPage === i + 1 
                               ? 'bg-gray-800 border-gray-800 text-white hover:bg-gray-700' 
                               : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-100'
@@ -582,9 +623,9 @@ export default function Home() {
                       </li>
                     ))}
                     
-                    <li className="inline-block">
+                    <li className="inline-block m-1 sm:m-0">
                       <a 
-                        className={`px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 ${currentPage === pageCount ? 'bg-gray-100 text-gray-400 cursor-not-allowed hover:bg-gray-100' : ''}`}
+                        className={`px-2 sm:px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 ${currentPage === pageCount ? 'bg-gray-100 text-gray-400 cursor-not-allowed hover:bg-gray-100' : ''}`}
                         href="#"
                         onClick={(e) => {
                           e.preventDefault();
