@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { FiSearch, FiRefreshCw, FiFilter, FiCalendar, FiInfo, FiBriefcase } from 'react-icons/fi';
+import { useState, useEffect, useRef } from 'react';
+import { FiSearch, FiRefreshCw, FiFilter, FiCalendar, FiInfo, FiBriefcase, FiMessageCircle, FiX, FiSend, FiChevronRight } from 'react-icons/fi';
 import React from 'react';
 import { 
   Select, 
@@ -11,8 +11,14 @@ import {
   TextField, 
   InputAdornment,
   ThemeProvider,
-  createTheme
+  createTheme,
+  Button,
+  Paper,
+  Avatar,
+  IconButton,
+  Tooltip
 } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
 
 export default function Home() {
   const [projects, setProjects] = useState([]);
@@ -26,6 +32,22 @@ export default function Home() {
   const [availableProjectTypes, setAvailableProjectTypes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const rowsPerPage = 10;
+  
+  // Chatbot state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [userContext, setUserContext] = useState('');
+  const [userCompany, setUserCompany] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [availableTags, setAvailableTags] = useState([]);
+  const [chatStage, setChatStage] = useState('role'); // role -> company -> tags -> chat
+  const [messages, setMessages] = useState([
+    { role: 'bot', content: 'Hello! I can help you find the most relevant project leads. Let\'s start with your role in the company.' }
+  ]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isProcessingResponse, setIsProcessingResponse] = useState(false);
+  
+  // Add ref for message container
+  const messagesContainerRef = useRef(null);
   
   // Create a theme to match your color scheme
   const theme = createTheme({
@@ -142,11 +164,23 @@ export default function Home() {
   // Extract unique project types whenever projects change
   useEffect(() => {
     if (projects.length > 0) {
-      const uniqueTypes = [...new Set(projects
-        .map(project => project["Project Type"])
-        .filter(type => type && type.trim() !== ''))]
-        .sort();
+      // Extract available tags from project types
+      const typesMap = new Map();
+      
+      projects.forEach(project => {
+        let type = project["Project Type"];
+        if (!type || type.trim() === '') return;
+        
+        const normalizedType = normalizeType(type);
+        if (normalizedType) {
+          typesMap.set(normalizedType, true);
+        }
+      });
+      
+      // Get unique types from map keys and sort alphabetically
+      const uniqueTypes = [...typesMap.keys()].sort();
       setAvailableProjectTypes(uniqueTypes);
+      setAvailableTags(uniqueTypes); // Set the available tags from project data
     }
   }, [projects]);
   
@@ -214,7 +248,7 @@ export default function Home() {
   const runPipeline = async () => {
     try {
       setIsPipelineRunning(true);
-      const response = await fetch('https://meresu-jsw-backend.onrender.com/api/run_pipeline', {
+      const response = await fetch('http://127.0.0.1:5000', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -258,9 +292,31 @@ export default function Home() {
     
     // Apply project type filter
     if (projectTypeFilter) {
-      filtered = filtered.filter(project => 
-        project["Project Type"] === projectTypeFilter
-      );
+      filtered = filtered.filter(project => {
+        // Normalize the project type for comparison
+        let type = project["Project Type"];
+        if (!type || type.trim() === '') return false;
+        
+        // Normalize case and trim
+        type = type.trim().toLowerCase();
+        
+        // Match based on category
+        if (projectTypeFilter === 'Metro' && type.includes('metro')) return true;
+        if (projectTypeFilter === 'Railway' && (type.includes('railway') || type.includes('rail'))) return true;
+        if (projectTypeFilter === 'Highway/Road' && (type.includes('highway') || type.includes('road'))) return true;
+        if (projectTypeFilter === 'Transportation - Port' && type.includes('port')) return true;
+        if (projectTypeFilter === 'Airport' && type.includes('airport')) return true;
+        if (projectTypeFilter === 'Manufacturing - Cement' && type.includes('cement')) return true;
+        if (projectTypeFilter === 'Manufacturing - Steel' && type.includes('steel')) return true;
+        if (projectTypeFilter === 'Manufacturing' && type.includes('manufacturing') && 
+            !type.includes('cement') && !type.includes('steel')) return true;
+        if (projectTypeFilter === 'Energy & Power' && 
+            (type.includes('power') || type.includes('energy'))) return true;
+        if (projectTypeFilter === 'Infrastructure' && type.includes('infrastructure')) return true;
+        
+        // For other categories, exact match
+        return normalizeType(project["Project Type"]) === projectTypeFilter;
+      });
     }
     
     // Apply sorting
@@ -325,10 +381,521 @@ export default function Home() {
   const startIndex = (currentPage - 1) * rowsPerPage;
   const paginatedProjects = filteredProjects.slice(startIndex, startIndex + rowsPerPage);
   
+  // Chat Helper Functions
+  const toggleChat = () => {
+    setIsChatOpen(!isChatOpen);
+  };
+
+  const handleInputChange = (e) => {
+    setInputMessage(e.target.value);
+  };
+
+  const advanceToNextStage = () => {
+    if (chatStage === 'role' && userContext.trim()) {
+      setChatStage('company');
+      setMessages([
+        ...messages,
+        { role: 'user', content: userContext },
+        { role: 'bot', content: `Thanks! What company do you represent? Please include your industry sector.` }
+      ]);
+      setInputMessage('');
+    } else if (chatStage === 'company' && inputMessage.trim()) {
+      setUserCompany(inputMessage);
+      setChatStage('tags');
+      setMessages([
+        ...messages,
+        { role: 'user', content: inputMessage },
+        { role: 'bot', content: `Great! Please select project types you're interested in below.` }
+      ]);
+      setInputMessage('');
+    } else if (chatStage === 'tags' && selectedTags.length > 0) {
+      setChatStage('chat');
+      
+      // Generate initial recommendations based on collected information
+      setIsProcessingResponse(true);
+      
+      const tagsMessage = `Selected interests: ${selectedTags.join(", ")}`;
+      
+      // Prepare data for initial recommendations
+      const projectData = {
+        recommendedProjects: generateScoredProjects(userContext, tagsMessage, userCompany)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10)
+          .map(item => item.project)
+      };
+      
+      // Add user message showing selected tags
+      setMessages(prev => [...prev, { role: 'user', content: tagsMessage }]);
+      
+      // Generate response with formatting
+      setTimeout(() => {
+        const initialResponse = generateLocalResponse(
+          "recommend projects", 
+          userContext, 
+          userCompany, 
+          tagsMessage, 
+          projectData
+        );
+        
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          content: initialResponse
+        }]);
+        
+        setIsProcessingResponse(false);
+      }, 1500);
+    }
+  };
+
+  const sendMessage = () => {
+    if (!inputMessage.trim() || isProcessingResponse) return;
+    
+    // Add user message
+    const updatedMessages = [
+      ...messages,
+      { role: 'user', content: inputMessage }
+    ];
+    setMessages(updatedMessages);
+    
+    // Start response processing
+    setIsProcessingResponse(true);
+    
+    // Process message based on the current stage
+    if (chatStage !== 'chat') {
+      advanceToNextStage();
+      setIsProcessingResponse(false);
+      return;
+    }
+    
+    // For chat stage, generate intelligent response via API
+    fetchAIResponse(inputMessage, userContext, userCompany, selectedTags.join(", "));
+  };
+  
+  // Function to fetch AI response from DeepSeek API
+  const fetchAIResponse = async (query, role, company, requirements) => {
+    try {
+      // First gather data locally
+      const projectData = prepareProjectDataForAPI(query, role, company, requirements);
+      
+      // Call DeepSeek API (simulated here with setTimeout)
+      setTimeout(() => {
+        const botResponse = generateLocalResponse(query, role, company, requirements, projectData);
+        setMessages(prev => [...prev, { role: 'bot', content: botResponse }]);
+        setInputMessage('');
+        setIsProcessingResponse(false);
+      }, 1500);
+      
+      // In a real implementation, you would do something like:
+      /*
+      const response = await fetch('https://your-backend-endpoint/api/deepseek', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query,
+          userContext: role,
+          userCompany: company,
+          userRequirements: requirements,
+          projectData
+        })
+      });
+      
+      if (!response.ok) throw new Error('API request failed');
+      
+      const data = await response.json();
+      setMessages(prev => [...prev, { role: 'bot', content: data.response }]);
+      setInputMessage('');
+      setIsProcessingResponse(false);
+      */
+      
+    } catch (error) {
+      console.error('Error fetching AI response:', error);
+      setMessages(prev => [...prev, { 
+        role: 'bot', 
+        content: "I'm sorry, I encountered an error while processing your request. Please try again." 
+      }]);
+      setInputMessage('');
+      setIsProcessingResponse(false);
+    }
+  };
+  
+  // Prepare project data for API
+  const prepareProjectDataForAPI = (query, role, company, requirements) => {
+    // Identify what kind of data we need based on the query
+    const queryLC = query.toLowerCase();
+    let projectData = {};
+    
+    // Get top 10 projects based on different criteria
+    if (queryLC.includes('prioritize') || queryLC.includes('important') || queryLC.includes('urgent')) {
+      // High priority projects
+      projectData.highPriorityProjects = filteredProjects
+        .filter(p => p.Urgency?.toLowerCase() === 'high')
+        .slice(0, 10);
+    } else if (queryLC.includes('steel')) {
+      // Steel-related projects
+      projectData.steelProjects = filteredProjects
+        .filter(p => 
+          (p["Steel Requirements"] && p["Steel Requirements"].length > 10) || 
+          (p["Project Type"] && p["Project Type"].toLowerCase().includes('steel'))
+        )
+        .slice(0, 10);
+    } else if (queryLC.includes('value') || queryLC.includes('contract') || queryLC.includes('amount')) {
+      // Value-based projects
+      projectData.valuableProjects = filteredProjects
+        .filter(p => p["Contract Value"] || p["Potential Value"])
+        .sort((a, b) => {
+          const aVal = extractNumericValue(a["Contract Value"] || a["Potential Value"] || "0");
+          const bVal = extractNumericValue(b["Contract Value"] || b["Potential Value"] || "0");
+          return bVal - aVal;
+        })
+        .slice(0, 10);
+    } else {
+      // Score all projects based on user profile
+      const scoredProjects = generateScoredProjects(role, requirements, company);
+      projectData.recommendedProjects = scoredProjects
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map(item => item.project);
+    }
+    
+    // Add metadata for the API
+    projectData.userProfile = {
+      role,
+      company,
+      requirements
+    };
+    
+    projectData.query = query;
+    
+    return projectData;
+  };
+  
+  // Generate scored projects
+  const generateScoredProjects = (role, tagString, company) => {
+    // Extract key information from user inputs
+    const roleLC = role.toLowerCase();
+    const tagsLC = tagString.toLowerCase();
+    const companyLC = company.toLowerCase();
+    const userTags = selectedTags.map(tag => tag.toLowerCase());
+    
+    // Create a scoring system for projects
+    return filteredProjects.map(project => {
+      let score = 0;
+      
+      // Score based on urgency
+      if (project.Urgency?.toLowerCase() === 'high') score += 30;
+      else if (project.Urgency?.toLowerCase() === 'medium') score += 15;
+      
+      // Score based on project type match with tags
+      const projectType = project["Project Type"]?.toLowerCase() || '';
+      const normalizedType = normalizeType(project["Project Type"] || "")?.toLowerCase();
+      
+      // Boost score if project type matches selected tags
+      if (normalizedType && userTags.includes(normalizedType.toLowerCase())) {
+        score += 40; // Higher boost for exact tag match
+      }
+      
+      // Score based on steel requirements
+      if (userTags.includes('manufacturing - steel') && 
+         (projectType.includes('steel') || 
+          (project["Steel Requirements"] && project["Steel Requirements"].length > 10))) {
+        score += 25;
+      }
+      
+      // Score infrastructure projects for managers/directors
+      if ((roleLC.includes('manager') || roleLC.includes('director') || roleLC.includes('executive')) && 
+          projectType.includes('infrastructure')) {
+        score += 20;
+      }
+      
+      // Score railway projects
+      if (userTags.includes('railway') && projectType.includes('railway')) {
+        score += 25;
+      }
+      
+      // Score metro projects
+      if (userTags.includes('metro') && projectType.includes('metro')) {
+        score += 25;
+      }
+      
+      // Score port projects
+      if (userTags.includes('transportation - port') && projectType.includes('port')) {
+        score += 25;
+      }
+      
+      // Score based on contract value
+      if (userTags.includes('energy & power') && project["Contract Value"]) {
+        score += 15;
+      }
+      
+      // Score based on location match
+      if (project.Location && companyLC.includes(project.Location.toLowerCase())) {
+        score += 20;
+      }
+      
+      return { project, score };
+    });
+  };
+  
+  // Generate local response (until DeepSeek API is integrated)
+  const generateLocalResponse = (query, role, company, requirements, projectData) => {
+    const queryLC = query.toLowerCase();
+    let response = "";
+    
+    // Format the projects data
+    const formatProjects = (projects) => {
+      if (!projects || projects.length === 0) return "No matching projects found.";
+      
+      return projects.map((p, index) => 
+        `**${index + 1}. ${p.Company || 'Unknown Company'}**: ${p.Title || 'Untitled Project'}\n` +
+        `   • **Type**: ${p["Project Type"] || 'N/A'}\n` +
+        `   • **Location**: ${p.Location || 'N/A'}\n` +
+        `   • **Priority**: ${p.Urgency || 'Low'}\n` +
+        `   • **Value**: ${p["Contract Value"] || p["Potential Value"] || 'Not specified'}\n` +
+        (p["Steel Requirements"] ? `   • **Steel Requirements**: ${p["Steel Requirements"].substring(0, 150)}${p["Steel Requirements"].length > 150 ? '...' : ''}\n` : '')
+      ).join('\n\n');
+    };
+    
+    // Generate introduction based on query type
+    if (queryLC.includes('prioritize') || queryLC.includes('important') || queryLC.includes('urgent')) {
+      response = `## Top High-Priority Projects\n\nBased on your role as a ${role} at ${company}, I've identified the following high-priority projects that align with your requirements for ${requirements}:\n\n`;
+      response += formatProjects(projectData.highPriorityProjects);
+      response += "\n\n### Recommendation\nThese high-priority projects should be your focus due to their urgency and alignment with your requirements. Would you like more specific information about any of these projects?";
+    } 
+    else if (queryLC.includes('steel')) {
+      response = `## Projects with Steel Requirements\n\nFor your role as ${role} at ${company} with interest in ${requirements}, here are the top projects involving steel:\n\n`;
+      response += formatProjects(projectData.steelProjects);
+      response += "\n\n### Analysis\nThese projects have significant steel components or requirements that match your interests. The steel requirements vary across projects, with some specifying particular grades or quantities. Consider prioritizing those that align most closely with your specific steel capabilities.";
+    } 
+    else if (queryLC.includes('value') || queryLC.includes('contract') || queryLC.includes('amount')) {
+      response = `## Highest Value Projects\n\nAs a ${role} at ${company} interested in ${requirements}, here are the projects with the highest contract/potential value:\n\n`;
+      response += formatProjects(projectData.valuableProjects);
+      response += "\n\n### Value Analysis\nThese projects represent significant investment opportunities, with the highest values concentrated in infrastructure and energy sectors. The contract values indicate potential for substantial steel supply requirements.";
+    } 
+    else {
+      response = `## Recommended Projects for ${company}\n\nBased on your role as ${role} and your interest in ${requirements}, I've analyzed all available projects and identified these top matches:\n\n`;
+      response += formatProjects(projectData.recommendedProjects);
+      response += "\n\n### Strategic Recommendation\nThese projects were selected based on their alignment with your specified interests and company profile. Consider prioritizing those with 'High' urgency levels, as they represent immediate opportunities. The projects span various sectors but all align with your specific requirements.";
+    }
+    
+    return response;
+  };
+  
+  // Intelligent lead recommendation based on user profile
+  const generateRecommendations = (role, requirements, company) => {
+    // Extract key information from user inputs
+    const roleLC = role.toLowerCase();
+    const requirementsLC = requirements.toLowerCase();
+    const companyLC = company.toLowerCase();
+    
+    // Create a scoring system for projects
+    const scoredProjects = filteredProjects.map(project => {
+      let score = 0;
+      
+      // Score based on urgency
+      if (project.Urgency?.toLowerCase() === 'high') score += 30;
+      else if (project.Urgency?.toLowerCase() === 'medium') score += 15;
+      
+      // Score based on project type match with requirements
+      const projectType = project["Project Type"]?.toLowerCase() || '';
+      if (requirementsLC.includes('steel') && 
+         (projectType.includes('steel') || 
+          (project["Steel Requirements"] && project["Steel Requirements"].length > 10))) {
+        score += 25;
+      }
+      
+      // Score infrastructure projects for managers/directors
+      if ((roleLC.includes('manager') || roleLC.includes('director') || roleLC.includes('executive')) && 
+          projectType.includes('infrastructure')) {
+        score += 20;
+      }
+      
+      // Score railway projects
+      if (requirementsLC.includes('railway') && projectType.includes('railway')) {
+        score += 25;
+      }
+      
+      // Score metro projects
+      if (requirementsLC.includes('metro') && projectType.includes('metro')) {
+        score += 25;
+      }
+      
+      // Score port projects
+      if (requirementsLC.includes('port') && projectType.includes('port')) {
+        score += 25;
+      }
+      
+      // Score based on contract value (if looking for high-value projects)
+      if (requirementsLC.includes('high value') && project["Contract Value"]) {
+        score += 15;
+      }
+      
+      // Score based on location match
+      if (project.Location && requirementsLC.includes(project.Location.toLowerCase())) {
+        score += 20;
+      }
+      
+      return { project, score };
+    });
+    
+    // Sort by score and take top 3
+    const topProjects = scoredProjects
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(item => {
+        const p = item.project;
+        return `• **${p.Company || 'Unknown Company'}**: ${p.Title || 'Untitled Project'}\n  ${p["Project Type"] || ''} | ${p.Location || ''} | ${p.Urgency || 'Low'} priority${p["Contract Value"] ? ` | Value: ${p["Contract Value"]}` : ''}`;
+      })
+      .join('\n\n');
+    
+    return topProjects || "No specific matches found based on your criteria. Try asking about specific project types or regions.";
+  };
+  
+  // Helper to extract numeric values from currency strings
+  const extractNumericValue = (valueStr) => {
+    if (!valueStr) return 0;
+    // Extract digits and decimals, ignore currency symbols and commas
+    const matches = valueStr.match(/[0-9.]+/g);
+    if (!matches) return 0;
+    return parseFloat(matches.join(''));
+  };
+  
+  // Helper function to suggest projects by exact type match
+  const suggestProjectsByExactType = (projectType) => {
+    const matchingProjects = filteredProjects
+      .filter(p => {
+        const normalizedProjectType = normalizeType(p["Project Type"] || "");
+        return normalizedProjectType === projectType;
+      })
+      .slice(0, 3)
+      .map(p => `• **${p.Company}**: ${p.Title}\n  ${p.Location || ''} | ${p.Urgency || 'Low'} priority${p["Contract Value"] ? ` | Value: ${p["Contract Value"]}` : ''}`)
+      .join('\n\n');
+      
+    return `Here are the top ${projectType} projects:\n\n${matchingProjects || `No ${projectType} projects currently available.`}`;
+  };
+  
+  // Helper function to normalize project types
+  const normalizeType = (type) => {
+    if (!type || type.trim() === '') return null;
+    
+    // Normalize case (Title Case) and trim whitespace
+    type = type.trim().toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+      
+    // Standardize common variations
+    if (type.includes('Metro')) return 'Metro';
+    if (type.includes('Railway') || type.includes('Rail')) return 'Railway';
+    if (type.includes('Highway') || type.includes('Road')) return 'Highway/Road';
+    if (type.includes('Port')) return 'Transportation - Port';
+    if (type.includes('Airport')) return 'Airport';
+    if (type.includes('Manufacturing') && type.includes('Cement')) return 'Manufacturing - Cement';
+    if (type.includes('Manufacturing') && type.includes('Steel')) return 'Manufacturing - Steel';
+    if (type.includes('Manufacturing')) return 'Manufacturing';
+    if (type.includes('Power') || type.includes('Energy')) return 'Energy & Power';
+    if (type.includes('Infrastructure')) return 'Infrastructure';
+    
+    return type;
+  };
+  
+  // Toggle tag selection
+  const toggleTag = (tag) => {
+    setSelectedTags(prev => {
+      if (prev.includes(tag)) {
+        return prev.filter(t => t !== tag);
+      } else {
+        return [...prev, tag];
+      }
+    });
+  };
+  
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      const element = messagesContainerRef.current;
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [messages]);
+  
   return (
     <ThemeProvider theme={theme}>
       <div className="min-h-screen bg-gray-50">
-        <style jsx global>{expandedStyles}</style>
+        <style jsx global>{`
+          ${expandedStyles}
+          
+          /* Markdown styles */
+          .markdown-content h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            color: #1f2937;
+          }
+          
+          .markdown-content h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            color: #1f2937;
+          }
+          
+          .markdown-content h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            color: #1f2937;
+          }
+          
+          .markdown-content ul {
+            list-style-type: disc;
+            margin-left: 1rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+          }
+          
+          .markdown-content ol {
+            list-style-type: decimal;
+            margin-left: 1rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+          }
+          
+          .markdown-content p {
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+          }
+          
+          .markdown-content a {
+            color: #2563eb;
+            text-decoration: underline;
+          }
+          
+          .markdown-content code {
+            font-family: monospace;
+            background-color: #f3f4f6;
+            padding: 0.1rem 0.2rem;
+            border-radius: 0.25rem;
+          }
+          
+          .markdown-content pre {
+            background-color: #f3f4f6;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+          }
+          
+          .markdown-content blockquote {
+            border-left: 3px solid #d1d5db;
+            padding-left: 0.5rem;
+            margin-left: 0.5rem;
+            color: #4b5563;
+          }
+        `}</style>
         
         <nav className="bg-gray-100 mb-6 shadow-lg shadow-gray-300">
           <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -704,6 +1271,190 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {/* Floating Chat Button */}
+        <div className="fixed bottom-6 right-6 z-50">
+          <Tooltip title={isChatOpen ? "Close chat" : "Get recommendations"}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={toggleChat}
+              sx={{
+                borderRadius: '50%',
+                minWidth: '56px',
+                width: '56px',
+                height: '56px',
+                boxShadow: '0 4px 14px 0 rgba(0,0,0,0.2)',
+              }}
+            >
+              {isChatOpen ? <FiX size={24} /> : <FiMessageCircle size={24} />}
+            </Button>
+          </Tooltip>
+        </div>
+
+        {/* Chat Modal */}
+        {isChatOpen && (
+          <div className="fixed bottom-10 right-6 z-50 w-80 sm:w-96">
+            <Paper elevation={3} sx={{ 
+              borderRadius: '12px', 
+              overflow: 'hidden', 
+              maxHeight: '500px',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Chat Header */}
+              <div className="bg-gray-800 text-white p-3 flex justify-between items-center">
+                <div className="flex items-center">
+                  <Avatar sx={{ bgcolor: '#4f46e5', width: 32, height: 32, marginRight: 1 }}>AI</Avatar>
+                  <h3 className="font-medium">Project Advisor</h3>
+                </div>
+                <IconButton onClick={toggleChat} size="small" sx={{ color: 'white' }}>
+                  <FiX />
+                </IconButton>
+              </div>
+              
+              {/* Chat Messages */}
+              <div className="p-3 overflow-y-auto flex-grow" 
+                   style={{ maxHeight: '300px' }}
+                   ref={messagesContainerRef}>
+                {messages.map((msg, idx) => (
+                  <div key={idx} className={`mb-3 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                    <div className={`inline-block p-2 rounded-lg ${
+                      msg.role === 'user' 
+                        ? 'bg-gray-800 text-white rounded-tr-none' 
+                        : 'bg-gray-100 text-gray-800 rounded-tl-none'
+                    }`}>
+                      {msg.role === 'bot' ? (
+                        <div className="markdown-content text-left max-w-[300px]">
+                          <ReactMarkdown>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        msg.content.split('\n').map((line, i) => (
+                          <React.Fragment key={i}>
+                            {line}
+                            {i < msg.content.split('\n').length - 1 && <br />}
+                          </React.Fragment>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Context Input or Chat Input */}
+              <div className="border-t p-3">
+                {chatStage === 'role' && (
+                  <div>
+                    <TextField
+                      fullWidth
+                      label="Your role in the company"
+                      variant="outlined"
+                      size="small"
+                      value={userContext}
+                      onChange={(e) => setUserContext(e.target.value)}
+                      placeholder="e.g., Sales Manager, Business Development"
+                      sx={{ mb: 2 }}
+                    />
+                    <Button 
+                      variant="contained" 
+                      color="primary" 
+                      fullWidth
+                      onClick={advanceToNextStage}
+                      disabled={!userContext.trim()}
+                      endIcon={<FiChevronRight />}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                )}
+                
+                {chatStage === 'company' && (
+                  <div className="flex items-center">
+                    <TextField
+                      fullWidth
+                      placeholder="Your company and industry"
+                      variant="outlined"
+                      size="small"
+                      value={inputMessage}
+                      onChange={handleInputChange}
+                      onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    />
+                    <IconButton 
+                      color="primary" 
+                      onClick={sendMessage}
+                      disabled={!inputMessage.trim()}
+                      sx={{ ml: 1 }}
+                    >
+                      <FiChevronRight />
+                    </IconButton>
+                  </div>
+                )}
+                
+                {chatStage === 'tags' && (
+                  <div>
+                    <div className="mb-2 text-sm text-gray-600">Select project types you're interested in:</div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {availableTags.map(tag => (
+                        <div 
+                          key={tag} 
+                          onClick={() => toggleTag(tag)}
+                          className={`px-2 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                            selectedTags.includes(tag) 
+                              ? 'bg-gray-800 text-white' 
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          {tag}
+                        </div>
+                      ))}
+                    </div>
+                    <Button 
+                      variant="contained" 
+                      color="primary" 
+                      fullWidth
+                      onClick={advanceToNextStage}
+                      disabled={selectedTags.length === 0}
+                      endIcon={<FiChevronRight />}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                )}
+                
+                {chatStage === 'chat' && !isProcessingResponse && (
+                  <div className="flex items-center">
+                    <TextField
+                      fullWidth
+                      placeholder="Ask about specific projects or requirements..."
+                      variant="outlined"
+                      size="small"
+                      value={inputMessage}
+                      onChange={handleInputChange}
+                      onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    />
+                    <IconButton 
+                      color="primary" 
+                      onClick={sendMessage}
+                      disabled={!inputMessage.trim()}
+                      sx={{ ml: 1 }}
+                    >
+                      <FiSend />
+                    </IconButton>
+                  </div>
+                )}
+                
+                {isProcessingResponse && (
+                  <div className="text-center py-2">
+                    <div className="inline-block w-5 h-5 border-2 rounded-full animate-spin mr-2 border-t-transparent border-gray-600"></div>
+                    <span className="text-gray-700">Processing response...</span>
+                  </div>
+                )}
+              </div>
+            </Paper>
+          </div>
+        )}
       </div>
     </ThemeProvider>
   );
