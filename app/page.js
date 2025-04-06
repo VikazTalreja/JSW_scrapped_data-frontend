@@ -49,6 +49,31 @@ export default function Home() {
   // Add ref for message container
   const messagesContainerRef = useRef(null);
   
+  // Helper function to normalize project types
+  const normalizeType = (type) => {
+    if (!type || type.trim() === '') return null;
+    
+    // Normalize case (Title Case) and trim whitespace
+    type = type.trim().toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+      
+    // Standardize common variations
+    if (type.includes('Metro')) return 'Metro';
+    if (type.includes('Railway') || type.includes('Rail')) return 'Railway';
+    if (type.includes('Highway') || type.includes('Road')) return 'Highway/Road';
+    if (type.includes('Port')) return 'Transportation - Port';
+    if (type.includes('Airport')) return 'Airport';
+    if (type.includes('Manufacturing') && type.includes('Cement')) return 'Manufacturing - Cement';
+    if (type.includes('Manufacturing') && type.includes('Steel')) return 'Manufacturing - Steel';
+    if (type.includes('Manufacturing')) return 'Manufacturing';
+    if (type.includes('Power') || type.includes('Energy')) return 'Energy & Power';
+    if (type.includes('Infrastructure')) return 'Infrastructure';
+    
+    return type;
+  };
+  
   // Create a theme to match your color scheme
   const theme = createTheme({
     palette: {
@@ -151,39 +176,6 @@ export default function Home() {
     }
   `;
   
-  useEffect(() => {
-    fetchProjects();
-    const interval = setInterval(checkPipelineStatus, 5000);
-    return () => clearInterval(interval);
-  }, [checkPipelineStatus]);
-  
-  useEffect(() => {
-    applyFilters();
-  }, [projects, searchTerm, priorityFilter, projectTypeFilter, sortBy, applyFilters]);
-
-  // Extract unique project types whenever projects change
-  useEffect(() => {
-    if (projects.length > 0) {
-      // Extract available tags from project types
-      const typesMap = new Map();
-      
-      projects.forEach(project => {
-        let type = project["Project Type"];
-        if (!type || type.trim() === '') return;
-        
-        const normalizedType = normalizeType(type);
-        if (normalizedType) {
-          typesMap.set(normalizedType, true);
-        }
-      });
-      
-      // Get unique types from map keys and sort alphabetically
-      const uniqueTypes = [...typesMap.keys()].sort();
-      setAvailableProjectTypes(uniqueTypes);
-      setAvailableTags(uniqueTypes); // Set the available tags from project data
-    }
-  }, [projects]);
-  
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
@@ -245,31 +237,11 @@ export default function Home() {
     }
   };
   
-  const runPipeline = async () => {
-    try {
-      setIsPipelineRunning(true);
-      const response = await fetch('http://127.0.0.1:5000', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.status !== 'success') {
-        setIsPipelineRunning(false);
-        alert(data.message || 'Failed to start pipeline');
-      }
-    } catch (error) {
-      setIsPipelineRunning(false);
-      alert('Error starting pipeline: ' + error.message);
-    }
-  };
+  useEffect(() => {
+    fetchProjects();
+    const interval = setInterval(checkPipelineStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
   
   const applyFilters = () => {
     let filtered = [...projects];
@@ -339,6 +311,59 @@ export default function Home() {
     
     setFilteredProjects(filtered);
     setCurrentPage(1);
+  };
+  
+  useEffect(() => {
+    applyFilters();
+  }, [projects, searchTerm, priorityFilter, projectTypeFilter, sortBy]);
+
+  // Extract unique project types whenever projects change
+  useEffect(() => {
+    if (projects.length > 0) {
+      // Extract available tags from project types
+      const typesMap = new Map();
+      
+      projects.forEach(project => {
+        let type = project["Project Type"];
+        if (!type || type.trim() === '') return;
+        
+        const normalizedType = normalizeType(type);
+        if (normalizedType) {
+          typesMap.set(normalizedType, true);
+        }
+      });
+      
+      // Get unique types from map keys and sort alphabetically
+      const uniqueTypes = [...typesMap.keys()].sort();
+      setAvailableProjectTypes(uniqueTypes);
+      setAvailableTags(uniqueTypes); // Set the available tags from project data
+    }
+  }, [projects]);
+  
+  const runPipeline = async () => {
+    try {
+      setIsPipelineRunning(true);
+      const response = await fetch('http://127.0.0.1:5000', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.status !== 'success') {
+        setIsPipelineRunning(false);
+        alert(data.message || 'Failed to start pipeline');
+      }
+    } catch (error) {
+      setIsPipelineRunning(false);
+      alert('Error starting pipeline: ' + error.message);
+    }
   };
   
   const getPriorityValue = (priority) => {
@@ -773,31 +798,6 @@ export default function Home() {
       .join('\n\n');
       
     return `Here are the top ${projectType} projects:\n\n${matchingProjects || `No ${projectType} projects currently available.`}`;
-  };
-  
-  // Helper function to normalize project types
-  const normalizeType = (type) => {
-    if (!type || type.trim() === '') return null;
-    
-    // Normalize case (Title Case) and trim whitespace
-    type = type.trim().toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-      
-    // Standardize common variations
-    if (type.includes('Metro')) return 'Metro';
-    if (type.includes('Railway') || type.includes('Rail')) return 'Railway';
-    if (type.includes('Highway') || type.includes('Road')) return 'Highway/Road';
-    if (type.includes('Port')) return 'Transportation - Port';
-    if (type.includes('Airport')) return 'Airport';
-    if (type.includes('Manufacturing') && type.includes('Cement')) return 'Manufacturing - Cement';
-    if (type.includes('Manufacturing') && type.includes('Steel')) return 'Manufacturing - Steel';
-    if (type.includes('Manufacturing')) return 'Manufacturing';
-    if (type.includes('Power') || type.includes('Energy')) return 'Energy & Power';
-    if (type.includes('Infrastructure')) return 'Infrastructure';
-    
-    return type;
   };
   
   // Toggle tag selection
