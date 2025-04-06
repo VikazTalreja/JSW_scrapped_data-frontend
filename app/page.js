@@ -155,11 +155,11 @@ export default function Home() {
     fetchProjects();
     const interval = setInterval(checkPipelineStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkPipelineStatus]);
   
   useEffect(() => {
     applyFilters();
-  }, [projects, searchTerm, priorityFilter, projectTypeFilter, sortBy]);
+  }, [projects, searchTerm, priorityFilter, projectTypeFilter, sortBy, applyFilters]);
 
   // Extract unique project types whenever projects change
   useEffect(() => {
@@ -405,7 +405,7 @@ export default function Home() {
       setMessages([
         ...messages,
         { role: 'user', content: inputMessage },
-        { role: 'bot', content: `Great! Please select project types you're interested in below.` }
+        { role: 'bot', content: `Great! Please select project types you&apos;re interested in below.` }
       ]);
       setInputMessage('');
     } else if (chatStage === 'tags' && selectedTags.length > 0) {
@@ -1394,7 +1394,7 @@ export default function Home() {
                 
                 {chatStage === 'tags' && (
                   <div>
-                    <div className="mb-2 text-sm text-gray-600">Select project types you're interested in:</div>
+                    <div className="mb-2 text-sm text-gray-600">Select project types you&apos;re interested in:</div>
                     <div className="flex flex-wrap gap-2 mb-3">
                       {availableTags.map(tag => (
                         <div 
