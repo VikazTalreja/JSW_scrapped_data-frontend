@@ -180,7 +180,7 @@ export default function Home() {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('https://meresu-jsw-backend.onrender.com/api/projects', {
+      const response = await fetch('https://meresu-jsw-backend-ekbh.onrender.com/api/projects', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -216,7 +216,7 @@ export default function Home() {
   
   const checkPipelineStatus = async () => {
     try {
-      const response = await fetch('https://meresu-jsw-backend.onrender.com/api/pipeline_status', {
+      const response = await fetch('https://meresu-jsw-backend-ekbh.onrender.com/api/pipeline_status', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
